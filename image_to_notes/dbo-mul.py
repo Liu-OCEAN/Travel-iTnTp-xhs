@@ -152,14 +152,14 @@ class DoubaoMultimodalGenerator:
         self.multi_image_prompt = """
         请根据提供的多张图片创作一篇综合的小红书风格旅行文案。
         
-        重要要求：
-        1. 生成一个吸引人的标题（含1-2个emoji） - 标题不超过20字
-        2. 正文内容不超过1000字，综合描述旅行经历
+        要求：
+        1. 生成一个吸引人的标题- 标题不超过16字
+        2. 300-500字正文，正文内容不超过800字,综合描述旅行经历
         3. 包含多个目的地特色、实用建议和个人体验
         4. 添加3-5个精准话题标签
         
         输出格式：
-        【标题】您的标题（含emoji）
+        【标题】您的标题
         
         【正文】
         综合描述旅行经历，包含：
@@ -345,21 +345,21 @@ class DoubaoMultimodalGenerator:
                 tags = re.findall(r"#(\w+)", tags_match.group(1))
             else:
                 tags = re.findall(r"#(\w+)", text)[:5]
-            
+               
             # 强制限制字数
             title_original_length = len(title)
             body_original_length = len(body)
             
-            # 标题强制限制在20字以内
-            if title_original_length > 20:
-                logger.warning(f"标题超过20字限制({title_original_length}字)，进行截断处理")
-                title = title[:20] + "..."  # 截断并添加省略号
+            # 标题强制限制在18字以内
+            if title_original_length > 18:
+                logger.warning(f"标题超过18字限制({title_original_length}字)，进行截断处理")
+                title = title[:18] + "..."  # 截断并添加省略号
+
+            # 正文强制限制在900字以内
+            if body_original_length > 900:
+                logger.warning(f"正文超过900字限制({body_original_length}字)，进行截断处理")
+                body = body[:900] + "..."  # 截断并添加省略号
             
-            # 正文强制限制在1000字以内
-            if body_original_length > 1000:
-                logger.warning(f"正文超过1000字限制({body_original_length}字)，进行截断处理")
-                body = body[:1000] + "..."  # 截断并添加省略号
-                
             return {
                 "title": title,
                 "body": body,
@@ -480,9 +480,8 @@ class TravelContentCreator:
         
         # 打印成功信息
         print(f"\n综合文案生成成功！共使用 {len(image_base64_list)} 张图片")
-        print(f"标题: {caption['title']} (长度: {len(caption['title'])}字)")
+        print(f"标题: {caption['title']}")
         print(f"\n文案内容:\n{caption['body']}")
-        print(f"\n内容长度: {len(caption['body'])}字")
         print(f"\n标签: {', '.join(['#' + t for t in caption['tags']])}")
         
         return result
