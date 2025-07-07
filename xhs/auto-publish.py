@@ -3,6 +3,7 @@ import os
 import time
 import traceback
 from datetime import datetime, timedelta
+import argparse  # 新增：用于命令行参数解析
 
 from selenium import webdriver
 from selenium.webdriver.common.by import By
@@ -12,7 +13,9 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException, NoSuchElementException, ElementClickInterceptedException
 
 # 保存Cookies的文件路径
-XIAOHONGSHU_COOKING = r'D:\train\xhs\out\config.json'
+XIAOHONGSHU_COOKING = r'D:\train\xhs\out\cookies\config.json'
+# 文案结果文件路径
+CONTENT_RESULT_FILE = r'D:\train\xhs\out\results\combined_result.json'
 
 # 获取浏览器驱动
 def get_driver():
@@ -128,15 +131,56 @@ def manual_login(driver):
         print("=")
         return False
 
-# 计算发布时间（当天20点，如果过了20点则设置为次日20点）
-def get_publish_date():
+# 计算发布时间（当天20点，如果过了20点则设置为次日20点），并添加时间范围校验
+def get_publish_date(user_time=None):
+    # 定义时间范围限制（单位：秒）
+    MIN_DELAY = 3600  # 1小时
+    MAX_DELAY = 14 * 24 * 3600  # 14天
+    
     now = datetime.now()
-    # 计算发布时间（当天或第二天20点）
-    if now.hour >= 20:
-        publish_time = now + timedelta(days=1)
-        publish_time = publish_time.replace(hour=20, minute=0, second=0, microsecond=0)
+    
+    # 尝试解析用户输入的时间
+    if user_time:
+        try:
+            # 支持多种格式：YYYY-MM-DD HH:MM 或 HH:MM
+            if len(user_time) == 5:  # HH:MM
+                hour, minute = map(int, user_time.split(':'))
+                publish_time = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
+                # 如果时间已过，则设置为第二天
+                if publish_time <= now:
+                    publish_time += timedelta(days=1)
+            else:  # YYYY-MM-DD HH:MM
+                publish_time = datetime.strptime(user_time, "%Y-%m-%d %H:%M")
+            
+            # 校验时间范围
+            time_diff = (publish_time - now).total_seconds()
+            if time_diff < MIN_DELAY:
+                print(f"⚠️ 发布时间太近（需至少1小时后），自动调整为默认时间")
+                user_time = None  # 触发使用默认时间
+            elif time_diff > MAX_DELAY:
+                print(f"⚠️ 发布时间太远（需在14天内），自动调整为默认时间")
+                user_time = None  # 触发使用默认时间
+            else:
+                return publish_time.strftime("%Y-%m-%d %H:%M")
+                
+        except ValueError:
+            print(f"⚠️ 无法解析时间格式: {user_time}，将使用默认时间")
+    
+    # 默认时间逻辑（确保在1小时-14天内）
+    # 计算当天的20点
+    today_20 = now.replace(hour=20, minute=0, second=0, microsecond=0)
+    # 计算明天的20点
+    tomorrow_20 = today_20 + timedelta(days=1)
+    
+    # 如果当前时间比当天的20点提前至少1小时
+    if (today_20 - now).total_seconds() >= MIN_DELAY:
+        publish_time = today_20
+    # 如果明天20点仍在14天内
+    elif (tomorrow_20 - now).total_seconds() <= MAX_DELAY:
+        publish_time = tomorrow_20
     else:
-        publish_time = now.replace(hour=20, minute=0, second=0, microsecond=0)
+        # 否则使用当前时间+1小时（确保在范围内）
+        publish_time = now + timedelta(seconds=MIN_DELAY)
     
     # 格式化为字符串 "YYYY-MM-DD HH:MM"
     return publish_time.strftime("%Y-%m-%d %H:%M")
@@ -253,8 +297,8 @@ def upload_images(driver, image_path, file_names):
     
     return loaded_count
 
-# 改进的定时发布功能
-def set_schedule_publish(driver):
+# 改进的定时发布功能（添加用户指定时间参数）
+def set_schedule_publish(driver, user_time=None):
     try:
         print("设置定时发布...")
         
@@ -292,7 +336,7 @@ def set_schedule_publish(driver):
                     continue
             
             if time_input:
-                publish_time = get_publish_date()
+                publish_time = get_publish_date(user_time)
                 
                 # 清除现有内容并输入新时间
                 time_input.clear()
@@ -339,10 +383,19 @@ def set_schedule_publish(driver):
     
     return False
 
-# 发布小红书图文 - 重点优化了标题输入部分
-def publish_xiaohongshu_image(driver, image_path, title, keywords):
+# 发布小红书图文 - 使用从JSON文件中获取的内容
+def publish_xiaohongshu_image(driver, image_path, content_data, user_time=None):
     try:
         print("=== 开始发布流程 ===")
+        
+        # 从JSON数据中提取内容
+        title = content_data["caption"]["title"]
+        body = content_data["caption"]["body"]
+        tags = content_data["caption"]["tags"]
+        
+        print(f"标题: {title}")
+        print(f"正文长度: {len(body)} 字符")
+        print(f"标签: {', '.join(tags)}")
         
         # 1. 进入发布页面
         print("导航到发布页面")
@@ -355,8 +408,8 @@ def publish_xiaohongshu_image(driver, image_path, title, keywords):
         if not upload_area:
             print("❌ 无法找到上传区域，退出发布流程")
             # 保存当前页面截图和源码用于调试
-            driver.save_screenshot(os.path.join(image_path, "upload_error.png"))
-            with open(os.path.join(image_path, "upload_page.html"), "w", encoding="utf-8") as f:
+            driver.save_screenshot(os.path.join(image_path, "error", "upload_error.png"))
+            with open(os.path.join(image_path, "error", "upload_page.html"), "w", encoding="utf-8") as f:
                 f.write(driver.page_source)
             print("📸 已保存错误截图和页面源码")
             return False
@@ -428,8 +481,8 @@ def publish_xiaohongshu_image(driver, image_path, title, keywords):
         else:
             print("❌ 多次尝试后仍无法找到标题输入框")
             # 保存当前页面截图和源码用于调试
-            driver.save_screenshot(os.path.join(image_path, "title_error.png"))
-            with open(os.path.join(image_path, "title_page.html"), "w", encoding="utf-8") as f:
+            driver.save_screenshot(os.path.join(image_path, "error", "title_error.png"))
+            with open(os.path.join(image_path, "error", "title_page.html"), "w", encoding="utf-8") as f:
                 f.write(driver.page_source)
             print("📸 已保存错误截图和页面源码")
             # 不退出，继续尝试其他操作
@@ -442,11 +495,21 @@ def publish_xiaohongshu_image(driver, image_path, title, keywords):
             safe_click(driver, description)
             time.sleep(1)
             
-            # 输入内容
-            description.send_keys("这是一篇自动发布的测试笔记\n")
+            # 输入正文内容
+            print("输入正文内容...")
+            for char in body:
+                description.send_keys(char)
+                time.sleep(0.01)  # 模拟真实输入速度
+            
+            print("✅ 正文内容已输入")
             
             # 添加关键词标签
-            for idx, label in enumerate(keywords):
+            for idx, label in enumerate(tags):
+                # 确保标签以#开头
+                if not label.startswith("#"):
+                    label = "#" + label
+                
+                # 在输入标签前添加一个空格
                 description.send_keys(" " + label)
                 print(f"添加标签: {label}")
                 time.sleep(1)  # 等待标签建议出现
@@ -472,8 +535,8 @@ def publish_xiaohongshu_image(driver, image_path, title, keywords):
         else:
             print("❌ 无法找到描述编辑器")
         
-        # 7. 设置定时发布
-        set_schedule_publish(driver)
+        # 7. 设置定时发布（使用用户指定的时间）
+        set_schedule_publish(driver, user_time)
         
         # 8. 发布笔记
         print("准备发布...")
@@ -514,8 +577,8 @@ def publish_xiaohongshu_image(driver, image_path, title, keywords):
         else:
             print("❌ 找不到发布按钮")
             # 保存当前页面截图和源码用于调试
-            driver.save_screenshot(os.path.join(image_path, "publish_error.png"))
-            with open(os.path.join(image_path, "publish_page.html"), "w", encoding="utf-8") as f:
+            driver.save_screenshot(os.path.join(image_path, "error", "publish_error.png"))
+            with open(os.path.join(image_path, "error", "publish_page.html"), "w", encoding="utf-8") as f:
                 f.write(driver.page_source)
             print("📸 已保存错误截图和页面源码")
             return False
@@ -552,22 +615,64 @@ def publish_xiaohongshu_image(driver, image_path, title, keywords):
         print(f"❌ 发布过程中出错: {str(e)}")
         traceback.print_exc()
         # 尝试截图保存错误信息
-        screenshot_path = os.path.join(image_path, "error_screenshot.png")
+        screenshot_path = os.path.join(image_path, "error", "error_screenshot.png")
         driver.save_screenshot(screenshot_path)
         print(f"📸 已保存错误截图: {screenshot_path}")
         return False
 
+# 加载文案内容
+def load_content_data():
+    try:
+        if not os.path.exists(CONTENT_RESULT_FILE):
+            print(f"❌ 文案结果文件不存在: {CONTENT_RESULT_FILE}")
+            return None
+        
+        with open(CONTENT_RESULT_FILE, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+            
+        if data.get('status') != 'success':
+            print(f"❌ 文案生成失败: {data.get('error', '未知错误')}")
+            return None
+        
+        # 确保标签格式正确
+        tags = data['caption']['tags']
+        processed_tags = []
+        for tag in tags:
+            # 移除可能的#号前缀
+            if tag.startswith('#'):
+                tag = tag[1:]
+            processed_tags.append(tag)
+        
+        # 更新标签列表
+        data['caption']['tags'] = processed_tags
+        
+        print(f"✅ 成功加载文案内容")
+        print(f"标题: {data['caption']['title']}")
+        print(f"标签: {', '.join(processed_tags)}")
+        print(f"图片数量: {len(data['images'])}")
+        
+        return data
+    except Exception as e:
+        print(f"❌ 加载文案内容失败: {str(e)}")
+        traceback.print_exc()
+        return None
+
 # 主函数
 if __name__ == "__main__":
+    # 解析命令行参数
+    parser = argparse.ArgumentParser(description="小红书自动发布工具")
+    parser.add_argument("--time", type=str, help="手动指定发布时间 (格式: YYYY-MM-DD HH:MM 或 HH:MM)", default=None)
+    args = parser.parse_args()
+    
     driver = None
     try:
-        # 文案内容设置
-        title = "Python自动化测试 - 小红书发布"  # 图文标题
-        keywords = ['#Python', '#自动化', '#小红书运营', '#技术分享']  # 标签列表
-        
         print("=== 开始小红书自动发布 ===")
-        print(f"标题: {title}")
-        print(f"标签: {', '.join(keywords)}")
+        
+        # 加载文案内容
+        content_data = load_content_data()
+        if not content_data:
+            print("❌ 无法加载文案内容，程序退出")
+            exit(1)
         
         # 初始化浏览器
         print("启动浏览器...")
@@ -591,17 +696,26 @@ if __name__ == "__main__":
         
         # 检查图片目录是否存在
         if not os.path.exists(image_dir):
-            print(f"⚠️ 图片目录不存在，创建目录: {image_dir}")
-            os.makedirs(image_dir, exist_ok=True)
-            
-            # 添加一个示例图片
-            sample_path = os.path.join(image_dir, "sample.png")
-            with open(sample_path, "wb") as f:
-                f.write(b"")  # 创建空文件作为占位符
-            print(f"创建示例图片: {sample_path}")
+            print(f"❌ 图片目录不存在: {image_dir}")
+            exit(1)
         
+        # 检查图片文件是否存在
+        image_files = []
+        for img_path in content_data["images"]:
+            if os.path.exists(img_path):
+                image_files.append(os.path.basename(img_path))
+            else:
+                print(f"⚠️ 图片不存在: {img_path}")
+        
+        if not image_files:
+            print("❌ 没有有效的图片文件，程序退出")
+            exit(1)
+        
+        print(f"找到 {len(image_files)} 张有效图片")
         print("开始发布流程...")
-        result = publish_xiaohongshu_image(driver, image_dir, title, keywords)
+        
+        # 执行发布
+        result = publish_xiaohongshu_image(driver, image_dir, content_data, args.time)
         
         if result:
             print("✅ 发布流程完成")
