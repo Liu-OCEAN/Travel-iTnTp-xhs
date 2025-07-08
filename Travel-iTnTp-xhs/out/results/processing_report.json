@@ -1,0 +1,39 @@
+{
+  "total_files": 4,
+  "success_count": 4,
+  "failure_count": 0,
+  "api_calls": {
+    "total_calls": 4,
+    "success_calls": 4,
+    "success_rate": 100.0
+  },
+  "success_rate": "100.00%",
+  "processing_times": [
+    64.69,
+    83.89,
+    71.98,
+    70.69
+  ],
+  "results": [
+    {
+      "image_path": "D:\\train\\xhs\\out\\1.jpg",
+      "status": "success",
+      "processing_time": 64.69
+    },
+    {
+      "image_path": "D:\\train\\xhs\\out\\2.jpg",
+      "status": "success",
+      "processing_time": 83.89
+    },
+    {
+      "image_path": "D:\\train\\xhs\\out\\3.jpg",
+      "status": "success",
+      "processing_time": 71.98
+    },
+    {
+      "image_path": "D:\\train\\xhs\\out\\4.jpg",
+      "status": "success",
+      "processing_time": 70.69
+    }
+  ]
+}
