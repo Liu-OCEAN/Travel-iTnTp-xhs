@@ -728,15 +728,26 @@ def load_content_data():
 
 # 主函数
 if __name__ == "__main__":
-    # 解析命令行参数
-    parser = argparse.ArgumentParser(description="小红书自动发布工具")
-    parser.add_argument("--time", type=str, help="手动指定发布时间 (格式: YYYY-MM-DD HH:MM 或 HH:MM)", default=None)
-    args = parser.parse_args()
+    # 提示用户输入发布时间
+    user_time = None
+    print("=== 小红书自动发布工具 ===")
+    print("请选择发布时间（直接回车使用默认时间）：")
+    print("1. 使用默认时间（当天20点或次日20点）")
+    print("2. 手动输入时间（格式：YYYY-MM-DD HH:MM 或 HH:MM）")
+    
+    choice = input("请选择（1/2）或直接回车使用默认时间: ").strip()
+    
+    if choice == "2":
+        user_time = input("请输入发布时间: ").strip()
+        if not user_time:
+            print("未输入时间，将使用默认时间")
+        else:
+            print(f"您输入的时间为: {user_time}")
+    else:
+        print("将使用默认发布时间")
     
     driver = None
     try:
-        print("=== 开始小红书自动发布 ===")
-        
         # 加载文案内容
         content_data = load_content_data()
         if not content_data:
@@ -784,7 +795,7 @@ if __name__ == "__main__":
         print("开始发布流程...")
         
         # 执行发布
-        result = publish_xiaohongshu_image(driver, image_dir, content_data, args.time)
+        result = publish_xiaohongshu_image(driver, image_dir, content_data, user_time)
         
         if result:
             print("✅ 发布流程完成")

@@ -92,13 +92,13 @@ python dbo-image-notes.py --max-size 768 --detail high --context my_context.txt
 
 #### 2. 手动发布
 ```bash
-python autopub.py --time "19:30"
+python autopub.py
 ```
 
 ### 自动化进行
 
 ```bash
-python main.py --publish-time "20:00"
+python main.py
 ```
 
 ### 参数说明
@@ -107,7 +107,6 @@ python main.py --publish-time "20:00"
 | `--max-size` | 图像最大尺寸(像素) | `--max-size 1024` |
 | `--detail` | 图像处理精细度 | `--detail high` |
 | `--context` | 额外上下文文件 | `--context notes.txt` |
-| `--publish-time` | 发布时间 | `--publish-time "2024-06-15 20:00"` |
 
 ## 注意事项
 
